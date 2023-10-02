@@ -13,17 +13,18 @@ const char* password = ""; // No password for the access point
 IPAddress apIP(10, 1, 1, 1);
 bool shouldRetry = true;
 
+
 // Function prototypes
 void serveWiFiConfigPage();
 bool isRegularCharacters(const char* str);
 bool connectToSavedNetwork();
 void saveNetworkCredentials(const char* ssid, const char* password);
 void handleConnect(AsyncWebServerRequest *request);
-bool saveNetworkSettings(const char* hostIP, const char* hostPort);
 void handleSave(AsyncWebServerRequest *request);
 void serveConnectedPage();
 void handleForget(AsyncWebServerRequest *request);
 
+WiFiServer tcpServer(8080);
 AsyncWebServer server(80);
 
 void serveWiFiConfigPage() {
@@ -45,6 +46,7 @@ void serveWiFiConfigPage() {
     handleConnect(request);
   });
   server.begin();
+  tcpServer.begin();
 }
 
 bool connectToSavedNetwork() {
@@ -166,127 +168,83 @@ bool isRegularCharacters(const char* str) {
   return true;
 }
 
-bool saveNetworkSettings(const char* hostIP, const char* hostPort) {
-  preferences.begin("network", false); // Start Preferences with the namespace "network"
-  // Save host IP and port to Preferences
-  preferences.putString("tcp_host", hostIP);
-  preferences.putInt("tcp_port", atoi(hostPort));
-  return true; // Successful save
-}
-
-void saveHostInfo(const char* host, int port) {
-  preferences.begin("network", false); // Start Preferences with the namespace "network"
-  // Save host and port to Preferences
-  preferences.putString("tcp_host", host);
-  preferences.putInt("tcp_port", port);
-  preferences.end(); // Save changes
-}
-
 void handleSave(AsyncWebServerRequest *request) {
-  preferences.begin("network", false); // Start Preferences with the namespace "network"
-  String tcp_host;
-  String tcp_port;
+  preferences.begin("network", false);
 
-  // Get TCP host and port from the request
-  if (request->hasParam("tcp_host", true)) {
-    tcp_host = request->getParam("tcp_host", true)->value();
+  // Declare variables
+  String osc1_host;
+  String osc2_host;
+  String osc_port;
+
+  // Check if parameters exist
+  if (request->hasParam("osc1_host", true)) {
+    osc1_host = request->getParam("osc1_host", true)->value();
   }
-  if (request->hasParam("tcp_port", true)) {
-    tcp_port = request->getParam("tcp_port", true)->value();
+
+  if (request->hasParam("osc2_host", true)) {
+    osc2_host = request->getParam("osc2_host", true)->value();
   }
 
-  if (tcp_host.length() > 0 && tcp_port.length() > 0) {
-    // Convert tcp_port string to integer
-    int port = tcp_port.toInt();
+  if (request->hasParam("osc_port", true)) {
+    osc_port = request->getParam("osc_port", true)->value();
+  }
 
-    // Save TCP settings and check for success
-    saveNetworkSettings(tcp_host.c_str(), tcp_port.c_str());
-    Serial.println("TCP settings saved");
-
-    // Add OSC settings
-    String osc1_host;
-    String osc2_host;
-    String osc_port;
-
-    // Get OSC settings from the request
-    if (request->hasParam("osc1_host", true)) {
-      osc1_host = request->getParam("osc1_host", true)->value();
-    }
-    if (request->hasParam("osc2_host", true)) {
-      osc2_host = request->getParam("osc2_host", true)->value();
-    }
-    if (request->hasParam("osc_port", true)) {
-      osc_port = request->getParam("osc_port", true)->value();
-    }
-
+  // Check if fields have content
+  if (osc1_host.length() > 0 && osc2_host.length() > 0 && osc_port.length() > 0) {
     // Save OSC settings
     preferences.putString("osc1_host", osc1_host);
     preferences.putString("osc2_host", osc2_host);
     preferences.putInt("osc1_port", atoi(osc_port.c_str()));
 
     Serial.println("OSC settings saved");
-    preferences.end(); // Save changes
+    preferences.end();
     request->send(200, "text/html", "Settings saved.");
   } else {
     Serial.println("Incomplete or invalid settings. Please try again.");
-    preferences.end(); // Save changes
+    preferences.end();
     request->send(400, "text/html", "Incomplete or invalid settings. Please try again.");
   }
 }
 
 void serveConnectedPage() {
-  // Begin Preferences
-  preferences.begin("network", false); // Start Preferences with the namespace "network"
+  preferences.begin("network", false);
 
   String htmlPage = "<html><body>";
   htmlPage += "<h2>Connected to Wi-Fi</h2>";
   htmlPage += "<p>IP Address: ";
   htmlPage += WiFi.localIP().toString();
   htmlPage += "</p>";
+  htmlPage += "<p>Receiving TCP on Port: 8080</p>";
 
-  // Display TCP host and port
-  htmlPage += "<h3>TCP Settings</h3>";
-  htmlPage += "<p>TCP Host: " + preferences.getString("tcp_host", "Not Set") + "</p>";
-  htmlPage += "<p>TCP Port: " + String(preferences.getInt("tcp_port", 0)) + "</p>";
-
-  // Display OSC host and port
   htmlPage += "<h3>OSC Settings</h3>";
   htmlPage += "<p>OSC Host 1: " + preferences.getString("osc1_host", "Not Set") + "</p>";
   htmlPage += "<p>OSC Host 2: " + preferences.getString("osc2_host", "Not Set") + "</p>";
   htmlPage += "<p>OSC Port: " + String(preferences.getInt("osc1_port", 0)) + "</p>";
 
-  // Add form for saving host settings
   htmlPage += "<h3>Host Settings</h3>";
   htmlPage += "<form method='post' action='/save'>";
-  htmlPage += "TCP Host: <input type='text' name='tcp_host' value='" + preferences.getString("tcp_host", "") + "'><br>";
-  htmlPage += "TCP Port: <input type='text' name='tcp_port' value='" + String(preferences.getInt("tcp_port", 0)) + "'><br>";
   htmlPage += "OSC Host 1: <input type='text' name='osc1_host' value='" + preferences.getString("osc1_host", "") + "'><br>";
   htmlPage += "OSC Host 2: <input type='text' name='osc2_host' value='" + preferences.getString("osc2_host", "") + "'><br>";
   htmlPage += "OSC Port: <input type='text' name='osc_port' value='" + String(preferences.getInt("osc1_port", 0)) + "'><br>";
   htmlPage += "<input type='submit' value='Save'></form>";
 
-  // Add button to forget network
   htmlPage += "<br><form method='post' action='/forget'>";
   htmlPage += "<input type='submit' value='Forget Network'></form>";
 
   htmlPage += "</body></html>";
 
-  // Serve the HTML page
   server.on("/", HTTP_GET, [htmlPage](AsyncWebServerRequest *request) {
     request->send(200, "text/html", htmlPage);
   });
 
-  // Serve the HTML Forget page
   server.on("/forget", HTTP_POST, [](AsyncWebServerRequest *request){
     handleForget(request);
   });
 
-  // Serve the HTML Save page
   server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request){
     handleSave(request);
   });
 
-  // End Preferences
   preferences.end();
 }
 
@@ -301,8 +259,6 @@ void handleForget(AsyncWebServerRequest *request) {
   preferences.remove("password");
 
   // Clear TCP and OSC settings
-  preferences.remove("tcp_host");
-  preferences.remove("tcp_port");
   preferences.remove("osc1_host");
   preferences.remove("osc2_host");
   preferences.remove("osc1_port");

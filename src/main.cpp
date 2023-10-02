@@ -35,6 +35,43 @@ void setup() {
   serveWiFiConfigPage();
 }
 
+void processJsonData(const String& jsonData) {
+  Serial.println("Received JSON: " + jsonData);
+  // Add your JSON processing logic here
+}
+
 void loop() {
   // Your main code here
+
+
+   // Check if there is a new client
+  WiFiClient tcpClient = tcpServer.available();
+  if (tcpClient) {
+    Serial.println("New TCP client connected");
+
+    // Read and process data from the TCP client here
+    String receivedData = "";
+    while (tcpClient.connected()) {
+      if (tcpClient.available()) {
+        char c = tcpClient.read();
+        //Serial.write(c);
+
+        // Check for newline character
+        if (c == '|') {
+          // Trim received data from \n and process it
+          processJsonData(receivedData); 
+
+          // Clear the buffer for the next line
+          receivedData = "";
+        } else {
+          // Append character to the buffer
+          receivedData += c;
+        }
+      }
+    }
+
+    // Close the connection
+    tcpClient.stop();
+    Serial.println("TCP client disconnected");
+  }
 }
